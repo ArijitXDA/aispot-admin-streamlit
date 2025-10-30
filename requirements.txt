@@ -1,7 +1,7 @@
 streamlit==1.31.0
 streamlit-authenticator==0.2.3
 supabase==2.9.0
-weasyprint==61.2
+requests==2.31.0
 Jinja2==3.1.2
 bcrypt==4.1.2
 python-dotenv==1.0.0
