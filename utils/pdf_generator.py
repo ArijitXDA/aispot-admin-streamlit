@@ -9,6 +9,7 @@ import requests
 import time
 from typing import Optional, Dict
 import streamlit as st
+from io import BytesIO
 
 # CloudConvert API configuration
 CLOUDCONVERT_API_KEY = os.getenv("CLOUDCONVERT_API_KEY", "")
@@ -63,7 +64,7 @@ def generate_standee_pdf(row_data: Dict) -> Optional[bytes]:
 
 def convert_html_to_pdf_cloudconvert(html_content: str, filename_prefix: str = "standee") -> Optional[bytes]:
     """
-    Convert HTML to PDF using CloudConvert API
+    Convert HTML to PDF using CloudConvert API with upload method
     
     Args:
         html_content: HTML string
@@ -78,16 +79,15 @@ def convert_html_to_pdf_cloudconvert(html_content: str, filename_prefix: str = "
             "Content-Type": "application/json"
         }
         
-        # Step 1: Create a job with filename specified
+        # Step 1: Create a job using import/upload
         job_data = {
             "tasks": {
-                "import-html": {
-                    "operation": "import/raw",
-                    "filename": "standee.html"
+                "upload-html": {
+                    "operation": "import/upload"
                 },
                 "convert-to-pdf": {
                     "operation": "convert",
-                    "input": "import-html",
+                    "input": "upload-html",
                     "output_format": "pdf",
                     "engine": "chrome",
                     "page_width": 210,
@@ -122,18 +122,22 @@ def convert_html_to_pdf_cloudconvert(html_content: str, filename_prefix: str = "
         job_response = response.json()
         job_id = job_response['data']['id']
         
-        # Step 2: Upload HTML content
-        import_task = next(task for task in job_response['data']['tasks'] if task['name'] == 'import-html')
-        upload_url = import_task['result']['form']['url']
-        upload_params = import_task['result']['form']['parameters']
+        # Step 2: Upload HTML content to the upload task
+        upload_task = next(task for task in job_response['data']['tasks'] if task['name'] == 'upload-html')
+        upload_task_id = upload_task['id']
+        upload_url = f"https://api.cloudconvert.com/v2/import/upload/{upload_task_id}"
         
-        # Add filename to upload params if not present
-        if 'filename' not in upload_params:
-            upload_params['filename'] = 'standee.html'
+        # Prepare the file for upload
+        files = {
+            'file': ('standee.html', html_content.encode('utf-8'), 'text/html')
+        }
         
-        # Upload HTML as file
-        files = {'file': ('standee.html', html_content.encode('utf-8'), 'text/html')}
-        upload_response = requests.post(upload_url, data=upload_params, files=files, timeout=60)
+        upload_response = requests.post(
+            upload_url,
+            headers={"Authorization": f"Bearer {CLOUDCONVERT_API_KEY}"},
+            files=files,
+            timeout=60
+        )
         
         if upload_response.status_code not in [200, 201]:
             st.error(f"HTML upload failed: {upload_response.text}")
@@ -161,19 +165,26 @@ def convert_html_to_pdf_cloudconvert(html_content: str, filename_prefix: str = "
             if status == 'finished':
                 # Get download URL
                 export_task = next(task for task in job_status['data']['tasks'] if task['name'] == 'export-pdf')
-                download_url = export_task['result']['files'][0]['url']
                 
-                # Download PDF
-                pdf_response = requests.get(download_url, timeout=30)
-                if pdf_response.status_code == 200:
-                    return pdf_response.content
+                if 'result' in export_task and 'files' in export_task['result']:
+                    download_url = export_task['result']['files'][0]['url']
+                    
+                    # Download PDF
+                    pdf_response = requests.get(download_url, timeout=30)
+                    if pdf_response.status_code == 200:
+                        return pdf_response.content
+                    else:
+                        st.error(f"PDF download failed: {pdf_response.text}")
+                        return None
                 else:
-                    st.error(f"PDF download failed: {pdf_response.text}")
+                    st.error("No download URL found in export task")
                     return None
             
             elif status == 'error':
-                error_details = job_status.get('data', {}).get('tasks', [])
-                st.error(f"CloudConvert job failed: {error_details}")
+                # Get detailed error information
+                error_tasks = [t for t in job_status['data']['tasks'] if t.get('status') == 'error']
+                error_msg = error_tasks[0].get('message', 'Unknown error') if error_tasks else 'Unknown error'
+                st.error(f"CloudConvert job failed: {error_msg}")
                 return None
             
             # Wait before checking again
@@ -256,13 +267,13 @@ def create_2x2_grid_html(standee_html: str) -> str:
     style_end = standee_html.find('</style>') + 8
     original_styles = standee_html[style_start:style_end] if style_start != -1 else ""
     
-    # Create 2x2 grid HTML
+    # Create 2x2 grid HTML with print button
     grid_html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Spot Standee - 2x2 Grid</title>
+    <title>AI Spot Standee - 2x2 Grid - Print to PDF</title>
     {original_styles}
     <style>
         @page {{
@@ -274,6 +285,26 @@ def create_2x2_grid_html(standee_html: str) -> str:
             margin: 0;
             padding: 0;
             background: white;
+        }}
+        
+        .print-button {{
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #0055aa;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            z-index: 10000;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }}
+        
+        .print-button:hover {{
+            background: #0066cc;
         }}
         
         .grid-container {{
@@ -322,9 +353,17 @@ def create_2x2_grid_html(standee_html: str) -> str:
         
         .cutting-guide.h1 {{ top: 50%; }}
         .cutting-guide.v1 {{ left: 50%; }}
+        
+        @media print {{
+            .print-button {{
+                display: none !important;
+            }}
+        }}
     </style>
 </head>
 <body>
+    <button class="print-button" onclick="window.print()">🖨️ Print to PDF</button>
+    
     <div class="cutting-guide horizontal h1"></div>
     <div class="cutting-guide vertical v1"></div>
     
