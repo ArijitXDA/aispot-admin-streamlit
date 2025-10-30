@@ -1,16 +1,15 @@
 """
 Email Sender utility module
-Sends standee PDFs via GoDaddy SMTP with mandatory BCC
+Sends standee HTML embedded in email body with 2x2 grid layout
 """
 
 import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.mime.application import MIMEApplication
 from typing import Dict, Optional
 import streamlit as st
-from utils.pdf_generator import generate_standee_pdf
+from utils.pdf_generator import generate_preview_html, create_2x2_grid_html
 
 def get_email_config():
     """Get email configuration from Streamlit secrets or environment variables"""
@@ -38,15 +37,15 @@ def get_email_config():
         'bcc': os.getenv("SMTP_BCC", "star.analytix.ai@gmail.com")
     }
 
-def create_email_body(row_data: Dict) -> str:
+def create_email_body_with_standee(row_data: Dict) -> str:
     """
-    Create HTML email body with AI Spot details
+    Create HTML email body with embedded AI Spot standee (2x2 grid)
     
     Args:
         row_data: Dictionary containing AI Spot data
     
     Returns:
-        str: HTML email body
+        str: Complete HTML email with embedded standee
     """
     
     name = row_data.get('name', '')
@@ -54,42 +53,77 @@ def create_email_body(row_data: Dict) -> str:
     manager_name = row_data.get('owner_manager_name', '')
     aispot_id = row_data.get('aispot_id', '')[:8]
     
+    # Generate the single standee HTML
+    standee_html = generate_preview_html(row_data)
+    
+    # Remove download section
+    standee_html = standee_html.replace('<div class="download-section">', '<div class="download-section" style="display: none;">')
+    
+    # Create 2x2 grid layout
+    grid_html = create_2x2_grid_html(standee_html)
+    
+    # Create email with greeting message + embedded standee
     email_html = f"""
 <!DOCTYPE html>
-<html>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-  <h2 style="color: #0055aa;">Dear {manager_name},</h2>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your AI Spot Table Standee</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; background: #f5f5f5;">
   
-  <p>Congratulations! Your AI Spot <strong>"{name}"</strong> has been approved.</p>
-  
-  <p>Please find attached your official <strong>AI Spot Table Standee PDF</strong>.</p>
-  
-  <div style="background: #f0f8ff; padding: 15px; border-left: 4px solid #0055aa; margin: 20px 0;">
-    <h3 style="margin-top: 0; color: #003366;">Standee Details:</h3>
-    <ul style="margin: 10px 0;">
-      <li><strong>AI Spot Name:</strong> {name}</li>
-      <li><strong>Type:</strong> {type_of_place}</li>
-      <li><strong>AI Spot ID:</strong> {aispot_id}</li>
-    </ul>
+  <!-- Greeting Section -->
+  <div style="max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+    <h2 style="color: #0055aa; margin-top: 0;">Dear {manager_name},</h2>
+    
+    <p style="font-size: 16px;">Congratulations! 🎉 Your AI Spot <strong>"{name}"</strong> has been approved.</p>
+    
+    <div style="background: #e6f7ff; padding: 20px; border-left: 4px solid #0055aa; margin: 25px 0; border-radius: 5px;">
+      <h3 style="margin-top: 0; color: #003366;">Your AI Spot Details:</h3>
+      <ul style="margin: 10px 0; padding-left: 20px;">
+        <li><strong>AI Spot Name:</strong> {name}</li>
+        <li><strong>Type:</strong> {type_of_place}</li>
+        <li><strong>Manager:</strong> {manager_name}</li>
+        <li><strong>AI Spot ID:</strong> {aispot_id}</li>
+      </ul>
+    </div>
+    
+    <h3 style="color: #0055aa;">📋 How to Use Your Standee:</h3>
+    <ol style="font-size: 15px; line-height: 1.8;">
+      <li><strong>Print:</strong> Open this email on a computer and print (Ctrl+P or Cmd+P)</li>
+      <li><strong>Paper:</strong> Use standard A4 size paper for best results</li>
+      <li><strong>Cut:</strong> Follow the dotted lines to get 4 identical standees</li>
+      <li><strong>Display:</strong> Place on your table, counter, or reception area</li>
+    </ol>
+    
+    <div style="background: #fff4e6; padding: 15px; border-left: 4px solid #ff9800; margin: 25px 0; border-radius: 5px;">
+      <p style="margin: 0; font-size: 14px;"><strong>💡 Tip:</strong> Scroll down to see your standee design below. You can print this entire email to get your 2×2 standee grid!</p>
+    </div>
+    
+    <p style="margin-top: 30px; font-size: 15px;">Questions? Contact us at: <a href="mailto:star.analytix.ai@gmail.com" style="color: #0055aa;">star.analytix.ai@gmail.com</a></p>
+    
+    <hr style="border: none; border-top: 2px solid #e0e0e0; margin: 40px 0;">
+    
+    <p style="color: #666; font-size: 14px; margin-bottom: 0;">
+      <strong>Best regards,</strong><br>
+      AI with Arijit Team<br>
+      <a href="https://www.AIwithArijit.com" style="color: #0055aa; text-decoration: none;">www.AIwithArijit.com</a>
+    </p>
   </div>
   
-  <h3 style="color: #0055aa;">Instructions:</h3>
-  <ol>
-    <li>Download the attached PDF file</li>
-    <li>Print on standard A4 size paper</li>
-    <li>Cut along the dotted lines to get 4 identical standees</li>
-    <li>Display on your table, counter, or reception area</li>
-  </ol>
+  <!-- Standee Section (2x2 Grid) -->
+  <div style="margin-top: 50px; page-break-before: always;">
+    <h2 style="text-align: center; color: #0055aa; font-size: 24px; margin-bottom: 30px;">
+      🖨️ Your AI Spot Table Standee (2×2 Grid)
+    </h2>
+    <div style="text-align: center; color: #666; font-size: 14px; margin-bottom: 20px;">
+      Print this page on A4 paper and cut along the dotted lines
+    </div>
+    
+    {grid_html}
+  </div>
   
-  <p style="margin-top: 30px;">For any queries, contact: <a href="mailto:star.analytix.ai@gmail.com">star.analytix.ai@gmail.com</a></p>
-  
-  <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-  
-  <p style="color: #666; font-size: 14px;">
-    <strong>Best regards,</strong><br>
-    AI with Arijit Team<br>
-    <a href="https://www.AIwithArijit.com">www.AIwithArijit.com</a>
-  </p>
 </body>
 </html>
 """
@@ -98,7 +132,7 @@ def create_email_body(row_data: Dict) -> str:
 
 def send_standee_email(row_data: Dict) -> bool:
     """
-    Send standee PDF via email to manager with BCC to admin
+    Send standee HTML embedded in email to manager with BCC to admin
     
     Args:
         row_data: Dictionary containing AI Spot data
@@ -120,28 +154,47 @@ def send_standee_email(row_data: Dict) -> bool:
             st.error("❌ No recipient email found in record.")
             return False
         
-        # Generate PDF
-        pdf_bytes = generate_standee_pdf(row_data)
-        if not pdf_bytes:
-            st.error("❌ Failed to generate PDF for email.")
-            return False
-        
         # Create message
-        msg = MIMEMultipart('mixed')
+        msg = MIMEMultipart('alternative')
         msg['From'] = config['email']
         msg['To'] = recipient_email
         msg['Bcc'] = config['bcc']  # MANDATORY BCC
-        msg['Subject'] = f"Your AI Spot Table Standee - {row_data.get('name', '')}"
+        msg['Subject'] = f"🎉 Your AI Spot Table Standee - {row_data.get('name', '')}"
         
-        # Add HTML body
-        html_body = create_email_body(row_data)
+        # Create HTML body with embedded standee
+        html_body = create_email_body_with_standee(row_data)
+        
+        # Add plain text alternative
+        text_body = f"""
+Dear {row_data.get('owner_manager_name', '')},
+
+Congratulations! Your AI Spot "{row_data.get('name', '')}" has been approved.
+
+Your AI Spot Details:
+- Name: {row_data.get('name', '')}
+- Type: {row_data.get('type_of_place', '')}
+- Manager: {row_data.get('owner_manager_name', '')}
+- AI Spot ID: {row_data.get('aispot_id', '')[:8]}
+
+Please open this email in an email client that supports HTML to view your standee design.
+
+Instructions:
+1. Open this email on a computer
+2. Print the email (Ctrl+P or Cmd+P)
+3. Use A4 paper
+4. Cut along dotted lines to get 4 standees
+5. Display at your location
+
+Questions? Contact: star.analytix.ai@gmail.com
+
+Best regards,
+AI with Arijit Team
+www.AIwithArijit.com
+"""
+        
+        # Attach both versions
+        msg.attach(MIMEText(text_body, 'plain'))
         msg.attach(MIMEText(html_body, 'html'))
-        
-        # Attach PDF
-        pdf_attachment = MIMEApplication(pdf_bytes, _subtype='pdf')
-        pdf_filename = f"standee_{row_data.get('name', '').replace(' ', '_')}_{row_data.get('aispot_id', '')[:8]}.pdf"
-        pdf_attachment.add_header('Content-Disposition', 'attachment', filename=pdf_filename)
-        msg.attach(pdf_attachment)
         
         # Send email
         if config['use_ssl']:
@@ -160,7 +213,7 @@ def send_standee_email(row_data: Dict) -> bool:
     
     except smtplib.SMTPAuthenticationError as e:
         st.error(f"❌ SMTP Authentication failed: {str(e)}")
-        st.error("Please verify your email credentials in environment variables.")
+        st.error("Please verify your email credentials in secrets.")
         return False
     
     except smtplib.SMTPException as e:
@@ -169,6 +222,8 @@ def send_standee_email(row_data: Dict) -> bool:
     
     except Exception as e:
         st.error(f"❌ Error sending email: {str(e)}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
         return False
 
 def test_email_configuration() -> bool:
@@ -178,21 +233,22 @@ def test_email_configuration() -> bool:
     Returns:
         bool: Configuration valid status
     """
+    config = get_email_config()
     issues = []
     
-    if not SMTP_HOST:
+    if not config['host']:
         issues.append("SMTP_HOST not set")
     
-    if not SMTP_PORT:
+    if not config['port']:
         issues.append("SMTP_PORT not set")
     
-    if not SMTP_EMAIL:
+    if not config['email']:
         issues.append("SMTP_EMAIL not set")
     
-    if not SMTP_PASSWORD:
+    if not config['password']:
         issues.append("SMTP_PASSWORD not set")
     
-    if not SMTP_BCC:
+    if not config['bcc']:
         issues.append("SMTP_BCC not set")
     
     if issues:
@@ -202,11 +258,11 @@ def test_email_configuration() -> bool:
         return False
     
     print("✅ Email configuration looks good!")
-    print(f"  SMTP Host: {SMTP_HOST}")
-    print(f"  SMTP Port: {SMTP_PORT}")
-    print(f"  SMTP SSL: {SMTP_USE_SSL}")
-    print(f"  From Email: {SMTP_EMAIL}")
-    print(f"  BCC Email: {SMTP_BCC}")
+    print(f"  SMTP Host: {config['host']}")
+    print(f"  SMTP Port: {config['port']}")
+    print(f"  SMTP SSL: {config['use_ssl']}")
+    print(f"  From Email: {config['email']}")
+    print(f"  BCC Email: {config['bcc']}")
     
     return True
 
@@ -221,12 +277,12 @@ def send_test_email(test_recipient: str) -> bool:
         bool: Success status
     """
     test_data = {
-        'name': 'Test AI Spot',
+        'name': 'Test AI Spot Cafe',
         'type_of_place': 'Testing Facility',
         'owner_manager_name': 'Test Manager',
         'aispot_id': 'test1234-5678-90ab-cdef-1234567890ab',
         'email': test_recipient,
-        'qr_code_link': 'https://aiwithArijit.com/test'
+        'qr_code_link': 'https://aiwithArijit.com/ai-spot/test'
     }
     
     print(f"Sending test email to: {test_recipient}")
