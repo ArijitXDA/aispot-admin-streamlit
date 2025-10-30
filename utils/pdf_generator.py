@@ -1,18 +1,21 @@
 """
 PDF Generator utility module
-Generates table standee PDFs using WeasyPrint to preserve HTML design
+Generates table standee PDFs using CloudConvert API
 Creates 2x2 layout (4 standees per A4 page)
 """
 
 import os
-from io import BytesIO
+import requests
+import time
 from typing import Optional, Dict
 import streamlit as st
-from weasyprint import HTML, CSS
+
+# CloudConvert API configuration
+CLOUDCONVERT_API_KEY = os.getenv("CLOUDCONVERT_API_KEY", "")
 
 def generate_standee_pdf(row_data: Dict) -> Optional[bytes]:
     """
-    Generate PDF with 2x2 layout (4 identical standees on A4) preserving HTML design
+    Generate PDF with 2x2 layout using CloudConvert API
     
     Args:
         row_data: Dictionary containing AI Spot data
@@ -21,6 +24,11 @@ def generate_standee_pdf(row_data: Dict) -> Optional[bytes]:
         bytes: PDF file as bytes or None if failed
     """
     try:
+        # Check if API key is configured
+        if not CLOUDCONVERT_API_KEY:
+            st.warning("⚠️ CloudConvert API key not configured. Downloading HTML file instead.")
+            return generate_standee_html_fallback(row_data)
+        
         # Load the standee template
         template_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates', 'tablestandee.html')
         
@@ -40,16 +48,170 @@ def generate_standee_pdf(row_data: Dict) -> Optional[bytes]:
         # Create 2x2 grid
         grid_html = create_2x2_grid_html(html_content)
         
-        # Generate PDF using WeasyPrint
-        html_obj = HTML(string=grid_html)
-        pdf_bytes = html_obj.write_pdf()
+        # Convert HTML to PDF using CloudConvert API
+        pdf_bytes = convert_html_to_pdf_cloudconvert(grid_html)
         
-        return pdf_bytes
+        if pdf_bytes:
+            return pdf_bytes
+        else:
+            st.warning("CloudConvert conversion failed. Downloading HTML file instead.")
+            return generate_standee_html_fallback(row_data)
     
     except Exception as e:
         st.error(f"Error generating PDF: {str(e)}")
+        return generate_standee_html_fallback(row_data)
+
+def convert_html_to_pdf_cloudconvert(html_content: str) -> Optional[bytes]:
+    """
+    Convert HTML to PDF using CloudConvert API
+    
+    Args:
+        html_content: HTML string
+    
+    Returns:
+        bytes: PDF content or None if failed
+    """
+    try:
+        headers = {
+            "Authorization": f"Bearer {CLOUDCONVERT_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        # Step 1: Create a job
+        job_data = {
+            "tasks": {
+                "import-html": {
+                    "operation": "import/raw"
+                },
+                "convert-to-pdf": {
+                    "operation": "convert",
+                    "input": "import-html",
+                    "output_format": "pdf",
+                    "engine": "chrome",
+                    "page_size": "A4",
+                    "margin_top": 0,
+                    "margin_right": 0,
+                    "margin_bottom": 0,
+                    "margin_left": 0,
+                    "print_background": True
+                },
+                "export-pdf": {
+                    "operation": "export/url",
+                    "input": "convert-to-pdf"
+                }
+            }
+        }
+        
+        # Create job
+        response = requests.post(
+            "https://api.cloudconvert.com/v2/jobs",
+            headers=headers,
+            json=job_data,
+            timeout=30
+        )
+        
+        if response.status_code != 201:
+            st.error(f"CloudConvert job creation failed: {response.text}")
+            return None
+        
+        job_response = response.json()
+        job_id = job_response['data']['id']
+        
+        # Step 2: Upload HTML content
+        import_task = next(task for task in job_response['data']['tasks'] if task['name'] == 'import-html')
+        upload_url = import_task['result']['form']['url']
+        upload_params = import_task['result']['form']['parameters']
+        
+        # Upload HTML
+        files = {'file': ('standee.html', html_content.encode('utf-8'), 'text/html')}
+        upload_response = requests.post(upload_url, data=upload_params, files=files, timeout=60)
+        
+        if upload_response.status_code not in [200, 201]:
+            st.error(f"HTML upload failed: {upload_response.text}")
+            return None
+        
+        # Step 3: Wait for job completion
+        max_wait = 60  # 60 seconds timeout
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait:
+            # Check job status
+            status_response = requests.get(
+                f"https://api.cloudconvert.com/v2/jobs/{job_id}",
+                headers=headers,
+                timeout=10
+            )
+            
+            if status_response.status_code != 200:
+                st.error(f"Job status check failed: {status_response.text}")
+                return None
+            
+            job_status = status_response.json()
+            status = job_status['data']['status']
+            
+            if status == 'finished':
+                # Get download URL
+                export_task = next(task for task in job_status['data']['tasks'] if task['name'] == 'export-pdf')
+                download_url = export_task['result']['files'][0]['url']
+                
+                # Download PDF
+                pdf_response = requests.get(download_url, timeout=30)
+                if pdf_response.status_code == 200:
+                    return pdf_response.content
+                else:
+                    st.error(f"PDF download failed: {pdf_response.text}")
+                    return None
+            
+            elif status == 'error':
+                st.error(f"CloudConvert job failed: {job_status}")
+                return None
+            
+            # Wait before checking again
+            time.sleep(2)
+        
+        st.error("CloudConvert job timeout")
+        return None
+    
+    except Exception as e:
+        st.error(f"CloudConvert API error: {str(e)}")
         import traceback
         st.error(f"Traceback: {traceback.format_exc()}")
+        return None
+
+def generate_standee_html_fallback(row_data: Dict) -> bytes:
+    """
+    Fallback: Generate HTML file when CloudConvert is not available
+    
+    Args:
+        row_data: Dictionary containing AI Spot data
+    
+    Returns:
+        bytes: HTML file as bytes
+    """
+    try:
+        # Load the standee template
+        template_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates', 'tablestandee.html')
+        
+        with open(template_path, 'r', encoding='utf-8') as f:
+            html_template = f.read()
+        
+        # Replace placeholders with actual data
+        html_content = html_template.replace('{{name}}', row_data.get('name', ''))
+        html_content = html_content.replace('{{type_of_place}}', row_data.get('type_of_place', ''))
+        html_content = html_content.replace('{{manager_name}}', row_data.get('owner_manager_name', ''))
+        html_content = html_content.replace('{{aispot_id}}', row_data.get('aispot_id', '')[:8])
+        html_content = html_content.replace('{{qr_code_link}}', row_data.get('qr_code_link', ''))
+        
+        # Remove download section
+        html_content = html_content.replace('<div class="download-section">', '<div class="download-section" style="display: none;">')
+        
+        # Create 2x2 grid
+        grid_html = create_2x2_grid_html(html_content)
+        
+        return grid_html.encode('utf-8')
+    
+    except Exception as e:
+        st.error(f"Error generating HTML fallback: {str(e)}")
         return None
 
 def create_2x2_grid_html(standee_html: str) -> str:
@@ -65,19 +227,17 @@ def create_2x2_grid_html(standee_html: str) -> str:
     
     # Extract the page div content
     page_start = standee_html.find('<div class="page"')
-    page_end = standee_html.rfind('</div>', 0, standee_html.find('<div class="download-section">'))
     
     if page_start == -1:
-        # Fallback: just use the body
         page_content = standee_html
     else:
-        # Get everything from page div to its closing tag
-        page_end = standee_html.find('</div><!--container-->', page_start)
-        if page_end == -1:
-            page_end = standee_html.find('</div>', page_start + 100)  # Find next closing div
-        page_end += len('</div>')
-        if '<!--container-->' in standee_html[page_end:page_end+20]:
-            page_end += len('<!--container-->') + 6  # Include closing page div
+        # Find the end of the page div (before download section)
+        download_start = standee_html.find('<div class="download-section">')
+        if download_start != -1:
+            page_end = standee_html.rfind('</div>', 0, download_start)
+            page_end = standee_html.rfind('</div>', 0, page_end) + 6
+        else:
+            page_end = standee_html.rfind('</div></body>')
         
         page_content = standee_html[page_start:page_end]
     
@@ -95,7 +255,6 @@ def create_2x2_grid_html(standee_html: str) -> str:
     <title>AI Spot Standee - 2x2 Grid</title>
     {original_styles}
     <style>
-        /* Override page settings for A4 grid */
         @page {{
             size: A4 portrait;
             margin: 0.3in 0.35in;
@@ -105,11 +264,6 @@ def create_2x2_grid_html(standee_html: str) -> str:
             margin: 0;
             padding: 0;
             background: white;
-        }}
-        
-        .grid-wrapper {{
-            width: 100%;
-            height: 100%;
         }}
         
         .grid-container {{
@@ -125,7 +279,6 @@ def create_2x2_grid_html(standee_html: str) -> str:
             display: flex;
             justify-content: center;
             align-items: center;
-            position: relative;
         }}
         
         .grid-item .page {{
@@ -136,7 +289,6 @@ def create_2x2_grid_html(standee_html: str) -> str:
             transform-origin: center center;
         }}
         
-        /* Cutting guides */
         .cutting-guide {{
             position: fixed;
             background: none;
@@ -160,34 +312,17 @@ def create_2x2_grid_html(standee_html: str) -> str:
         
         .cutting-guide.h1 {{ top: 50%; }}
         .cutting-guide.v1 {{ left: 50%; }}
-        
-        /* Print optimization */
-        @media print {{
-            html, body {{
-                width: 100%;
-                height: 100%;
-            }}
-            .grid-container {{
-                page-break-inside: avoid;
-            }}
-            .grid-item {{
-                page-break-inside: avoid;
-            }}
-        }}
     </style>
 </head>
 <body>
-    <!-- Cutting guides -->
     <div class="cutting-guide horizontal h1"></div>
     <div class="cutting-guide vertical v1"></div>
     
-    <div class="grid-wrapper">
-        <div class="grid-container">
-            <div class="grid-item">{page_content}</div>
-            <div class="grid-item">{page_content}</div>
-            <div class="grid-item">{page_content}</div>
-            <div class="grid-item">{page_content}</div>
-        </div>
+    <div class="grid-container">
+        <div class="grid-item">{page_content}</div>
+        <div class="grid-item">{page_content}</div>
+        <div class="grid-item">{page_content}</div>
+        <div class="grid-item">{page_content}</div>
     </div>
 </body>
 </html>"""
@@ -196,7 +331,7 @@ def create_2x2_grid_html(standee_html: str) -> str:
 
 def generate_preview_html(row_data: Dict) -> str:
     """
-    Generate HTML preview (single standee) for display in Streamlit
+    Generate HTML preview for display in Streamlit
     
     Args:
         row_data: Dictionary containing AI Spot data
@@ -205,13 +340,11 @@ def generate_preview_html(row_data: Dict) -> str:
         str: HTML content for preview
     """
     try:
-        # Load the standee template
         template_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates', 'tablestandee.html')
         
         with open(template_path, 'r', encoding='utf-8') as f:
             html_template = f.read()
         
-        # Replace placeholders with actual data
         html_content = html_template.replace('{{name}}', row_data.get('name', ''))
         html_content = html_content.replace('{{type_of_place}}', row_data.get('type_of_place', ''))
         html_content = html_content.replace('{{manager_name}}', row_data.get('owner_manager_name', ''))
@@ -223,36 +356,3 @@ def generate_preview_html(row_data: Dict) -> str:
     except Exception as e:
         st.error(f"Error generating HTML preview: {str(e)}")
         return ""
-
-def test_pdf_generation():
-    """
-    Test PDF generation with sample data
-    """
-    sample_data = {
-        'name': 'Tech Hub Cafe',
-        'type_of_place': 'Cafe & Co-working Space',
-        'owner_manager_name': 'John Smith',
-        'aispot_id': '12345678-1234-1234-1234-123456789012',
-        'qr_code_link': 'https://aiwithArijit.com/ai-spot/test'
-    }
-    
-    pdf_bytes = generate_standee_pdf(sample_data)
-    
-    if pdf_bytes:
-        print("✅ PDF generated successfully!")
-        print(f"PDF size: {len(pdf_bytes)} bytes")
-        
-        # Save test PDF
-        with open('test_standee.pdf', 'wb') as f:
-            f.write(pdf_bytes)
-        print("💾 Test PDF saved as 'test_standee.pdf'")
-        
-        return True
-    else:
-        print("❌ PDF generation failed")
-        return False
-
-if __name__ == "__main__":
-    # Run test when module is executed directly
-    print("Testing PDF generation...")
-    test_pdf_generation()
