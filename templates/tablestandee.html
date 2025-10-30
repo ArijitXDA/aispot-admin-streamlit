@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AI Spot – Premium Blue & White Standee</title>
+<style>
+  @page { size: 4in 6in; margin: 0; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #00264d;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-family: "Inter","Poppins","Segoe UI",system-ui,Arial,sans-serif;
+    color: #ffffff;
+    height: 100%;
+  }
+
+  .page {
+    width: 4in;
+    height: 6in;
+    margin: 0 auto;
+    box-sizing: border-box;
+    background: linear-gradient(180deg,#003366 0%,#0055aa 100%);
+    border: 0.12in solid #66ccff;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 20px rgba(102,204,255,0.4);
+  }
+
+  .container {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 0.15in 0.18in 0.06in;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.04in;
+    overflow: hidden;
+  }
+
+  .verified-top {
+    position: absolute;
+    top: 0.15in;
+    right: 0.2in;
+    font-size: 7px;
+    font-weight: 600;
+    color: #ffffff;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    opacity: 0.95;
+    text-shadow: 0 0 3px rgba(255,255,255,0.3);
+  }
+
+  .verified-top::before {
+    content: "★★★★★ ";
+    color: #ffd700;
+    font-size: 6px;
+    vertical-align: middle;
+  }
+
+  .header {
+    text-align: center;
+    width: 100%;
+    margin-top: 0.08in;
+  }
+
+  .header h1 {
+    margin: 0;
+    text-align: center;
+    line-height: 1.3;
+  }
+
+  .header h1 .headline-line {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .header h1 .ai-spot {
+    color: #ffffff;
+    font-size: 24px;
+    font-weight: 900;
+    letter-spacing: 1.2px;
+    text-shadow: 0 0 12px rgba(255,255,255,0.6), 0 0 20px rgba(102,204,255,0.4);
+    background: linear-gradient(180deg, #ffffff 0%, #e6f7ff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    padding: 0 8px;
+    position: relative;
+  }
+
+  .header h1 .ai-spot::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    background: rgba(102,204,255,0.15);
+    border-radius: 4px;
+    z-index: -1;
+  }
+
+  .header h1 .side-text {
+    font-size: 8px;
+    color: #a3d9ff;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  .headline {
+    text-align: center;
+    margin-top: 0.06in;
+    width: 100%;
+    padding: 0 0.05in;
+  }
+
+  .headline h2 {
+    font-size: 26px;
+    font-weight: 900;
+    color: #ffffff;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 0;
+    text-shadow: 0 0 10px rgba(255,255,255,0.4);
+    line-height: 1.1;
+  }
+
+  .qr-wrap {
+    background: #ffffff;
+    padding: 0.08in;
+    border-radius: 0.08in;
+    border: 0.04in solid #66ccff;
+    box-shadow: 0 0 15px rgba(102,204,255,0.3);
+    width: 100%;
+    max-width: 1.6in;
+    display: flex;
+    justify-content: center;
+    margin-top: 0.04in;
+  }
+
+  .qr-wrap img {
+    width: 1.45in;
+    height: 1.45in;
+    border-radius: 0.04in;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+
+  .place-wrap {
+    text-align: center;
+    margin-top: 0.06in;
+  }
+
+  .place {
+    font-size: 14px;
+    font-weight: 900;
+    color: #ffffff;
+    text-shadow: 0 0 5px rgba(255,255,255,0.3);
+    line-height: 1.1;
+  }
+
+  .place small {
+    display: block;
+    font-size: 8px;
+    color: #cce7ff;
+    margin-top: 2px;
+    font-weight: 600;
+  }
+
+  .flow-wrap {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin-top: 0.06in;
+  }
+
+  .flow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .step {
+    background: linear-gradient(180deg,#004080 0%,#003366 100%);
+    border-radius: 0.04in;
+    padding: 0.04in 0.03in;
+    border: 0.5px solid rgba(102,204,255,0.4);
+    box-shadow: 0 2px 8px rgba(102,204,255,0.2);
+    width: 1in;
+    min-height: 0.65in;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .badge {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    background: #66ccff;
+    color: #003366;
+    font-size: 10px;
+    font-weight: 900;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 2px;
+  }
+
+  .step h3 {
+    font-size: 9px;
+    font-weight: 800;
+    color: #ffffff;
+    margin: 0 0 2px;
+    line-height: 1.2;
+  }
+
+  .step p {
+    font-size: 6.5px;
+    color: #cce7ff;
+    margin: 0;
+    line-height: 1.3;
+  }
+
+  .arrow {
+    font-size: 10px;
+    color: #66ccff;
+  }
+
+  .desc {
+    width: 100%;
+    text-align: center;
+    font-size: 7px;
+    color: #e6f7ff;
+    line-height: 1.5;
+    margin-top: 0.04in;
+  }
+
+  .desc strong { color: #66ccff; }
+
+  .desc .intro {
+    font-size: 7px;
+    font-weight: 700;
+    color: #ffffff;
+    line-height: 1.3;
+    margin-bottom: 3px;
+    display: block;
+  }
+
+  .desc .subtext {
+    font-size: 7px;
+    font-weight: 600;
+    color: #a3e4ff;
+    margin-top: 4px;
+    display: block;
+  }
+
+  .desc ul {
+    list-style: none;
+    padding: 0;
+    margin: 5px 0 0 0;
+    text-align: left;
+    display: inline-block;
+    line-height: 1.6;
+    font-size: 7px;
+    color: #e6f7ff;
+  }
+
+  .desc li {
+    margin-bottom: 3px;
+    padding-left: 12px;
+    position: relative;
+  }
+
+  .desc li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: #66ffcc;
+    font-weight: 800;
+    font-size: 8px;
+  }
+
+  .venue {
+    text-align: center;
+    font-size: 5.5px;
+    color: #ffffff;
+    font-weight: 700;
+    margin-top: 0.03in;
+    line-height: 1.2;
+  }
+
+  .venue small {
+    display: block;
+    font-size: 5px;
+    color: #cce7ff;
+    margin-top: 2px;
+    line-height: 1.2;
+  }
+
+  .footer {
+    width: 100%;
+    text-align: center;
+    font-size: 5px;
+    color: #cce7ff;
+    padding: 0.03in 0 0.02in;
+    border-top: 0.5px solid rgba(102,204,255,0.3);
+    line-height: 1.2;
+    margin-top: auto;
+  }
+
+  .footer strong { color: #66ccff; }
+
+  .download-section {
+    width: 100%;
+    max-width: 4in;
+    text-align: center;
+    padding: 0.3in 0;
+    margin: 0 auto;
+  }
+
+  .download-btn {
+    display: inline-block;
+    background: linear-gradient(135deg, #66ccff 0%, #0099ff 100%);
+    color: #003366;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 12px 28px;
+    border-radius: 8px;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(102,204,255,0.4);
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .download-btn:hover {
+    background: linear-gradient(135deg, #88ddff 0%, #33aaff 100%);
+    box-shadow: 0 6px 20px rgba(102,204,255,0.6);
+    transform: translateY(-2px);
+  }
+
+  .download-btn:active {
+    transform: translateY(0);
+  }
+
+  @media print {
+    html, body { width: 4in; height: 6in; }
+    .page { page-break-after: avoid; }
+    .download-section { display: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="page" role="document">
+    <div class="verified-top">Verified AI Spot</div>
+
+    <div class="container">
+      <div class="header">
+        <h1>
+          <div class="headline-line">
+            <span class="side-text">you are in an</span>
+            <span class="ai-spot">AI SPOT</span>
+            <span class="side-text">network</span>
+          </div>
+        </h1>
+      </div>
+
+      <div class="headline"><h2>Are you AI ready?</h2></div>
+
+      <div class="desc">
+        <span class="intro">Scan the QR to discover your <strong>AI Readiness Score</strong> instantly – it takes just 2 minutes!</span>
+      </div>
+
+      <div class="qr-wrap">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=3000x3000&data={{qr_code_link}}&ecc=H" alt="AI Spot QR Code">
+      </div>
+
+      <div class="place-wrap">
+        <div class="place">{{name}}<small>{{type_of_place}}</small></div>
+      </div>
+
+      <div class="flow-wrap">
+        <div class="flow">
+          <div class="step"><div class="badge">1</div><h3>Scan the QR</h3><p>Open your phone camera – no app required.</p></div>
+          <div class="arrow">➜</div>
+          <div class="step"><div class="badge">2</div><h3>Take a 2-Minute Quiz</h3><p>Answer 5–6 short questions – quick & fun.</p></div>
+          <div class="arrow">➜</div>
+          <div class="step"><div class="badge">3</div><h3>Get Your AI Readiness Score</h3><p>+ Premium AI library access + a complimentary professional AI Certification course for you</p></div>
+        </div>
+      </div>
+
+      <div class="desc">
+        <span class="subtext">There is no sign-up cost, no access cost, and no hidden cost – <strong>it's free forever.</strong></span>
+        <ul>
+          <li><strong>Personalized AI Readiness Score</strong> with an instant <strong>AI Learning Roadmap</strong> in your inbox.</li>
+          <li><strong>Lifetime access</strong> to AIwithArijit's Premium AI Library – 100+ AI tools, guides & projects.</li>
+          <li>Learn to <strong>build ChatGPTs & AI Agents</strong> for your work or business.</li>
+          <li><strong>Earn AI Certifications</strong> – a complimentary gift from <strong>{{name}}</strong> and <strong>AIwithArijit.com</strong> – that boost your LinkedIn & professional profile.</li>
+        </ul>
+      </div>
+
+      <div class="venue">
+        AI Spot ID: <strong>{{aispot_id}}</strong>
+        <small>
+          Thank <strong>{{manager_name}}</strong> – {{name}} has converted this place into an official AI Spot. This is their complimentary gift to you.
+        </small>
+      </div>
+
+      <div class="footer">
+        You're part of a growing AI revolution. 
+        <strong>Stay curious. Stay relevant. Stay AI ready.</strong><br>
+        © 2025 • AiwithArijit.com
+      </div>
+    </div>
+  </div>
+
+  <div class="download-section">
+    <button class="download-btn" onclick="downloadPDF()">📥 Download the PDF Table-Standee Poster</button>
+  </div>
+
+  <script>
+    function downloadPDF() {
+      // Hide the download button temporarily
+      const downloadSection = document.querySelector('.download-section');
+      downloadSection.style.display = 'none';
+      
+      // Trigger browser print dialog
+      window.print();
+      
+      // Show the button again after print dialog
+      setTimeout(() => {
+        downloadSection.style.display = 'block';
+      }, 100);
+    }
+  </script>
+</body>
+</html>
