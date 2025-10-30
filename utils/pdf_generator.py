@@ -49,7 +49,7 @@ def generate_standee_pdf(row_data: Dict) -> Optional[bytes]:
         grid_html = create_2x2_grid_html(html_content)
         
         # Convert HTML to PDF using CloudConvert API
-        pdf_bytes = convert_html_to_pdf_cloudconvert(grid_html)
+        pdf_bytes = convert_html_to_pdf_cloudconvert(grid_html, row_data.get('name', 'standee'))
         
         if pdf_bytes:
             return pdf_bytes
@@ -61,12 +61,13 @@ def generate_standee_pdf(row_data: Dict) -> Optional[bytes]:
         st.error(f"Error generating PDF: {str(e)}")
         return generate_standee_html_fallback(row_data)
 
-def convert_html_to_pdf_cloudconvert(html_content: str) -> Optional[bytes]:
+def convert_html_to_pdf_cloudconvert(html_content: str, filename_prefix: str = "standee") -> Optional[bytes]:
     """
     Convert HTML to PDF using CloudConvert API
     
     Args:
         html_content: HTML string
+        filename_prefix: Prefix for the filename
     
     Returns:
         bytes: PDF content or None if failed
@@ -77,23 +78,26 @@ def convert_html_to_pdf_cloudconvert(html_content: str) -> Optional[bytes]:
             "Content-Type": "application/json"
         }
         
-        # Step 1: Create a job
+        # Step 1: Create a job with filename specified
         job_data = {
             "tasks": {
                 "import-html": {
-                    "operation": "import/raw"
+                    "operation": "import/raw",
+                    "filename": "standee.html"
                 },
                 "convert-to-pdf": {
                     "operation": "convert",
                     "input": "import-html",
                     "output_format": "pdf",
                     "engine": "chrome",
-                    "page_size": "A4",
-                    "margin_top": 0,
-                    "margin_right": 0,
-                    "margin_bottom": 0,
-                    "margin_left": 0,
-                    "print_background": True
+                    "page_width": 210,
+                    "page_height": 297,
+                    "margin_top": 8,
+                    "margin_right": 9,
+                    "margin_bottom": 8,
+                    "margin_left": 9,
+                    "print_background": True,
+                    "display_header_footer": False
                 },
                 "export-pdf": {
                     "operation": "export/url",
@@ -111,7 +115,8 @@ def convert_html_to_pdf_cloudconvert(html_content: str) -> Optional[bytes]:
         )
         
         if response.status_code != 201:
-            st.error(f"CloudConvert job creation failed: {response.text}")
+            error_msg = response.json() if response.text else response.text
+            st.error(f"CloudConvert job creation failed: {error_msg}")
             return None
         
         job_response = response.json()
@@ -122,7 +127,11 @@ def convert_html_to_pdf_cloudconvert(html_content: str) -> Optional[bytes]:
         upload_url = import_task['result']['form']['url']
         upload_params = import_task['result']['form']['parameters']
         
-        # Upload HTML
+        # Add filename to upload params if not present
+        if 'filename' not in upload_params:
+            upload_params['filename'] = 'standee.html'
+        
+        # Upload HTML as file
         files = {'file': ('standee.html', html_content.encode('utf-8'), 'text/html')}
         upload_response = requests.post(upload_url, data=upload_params, files=files, timeout=60)
         
@@ -163,7 +172,8 @@ def convert_html_to_pdf_cloudconvert(html_content: str) -> Optional[bytes]:
                     return None
             
             elif status == 'error':
-                st.error(f"CloudConvert job failed: {job_status}")
+                error_details = job_status.get('data', {}).get('tasks', [])
+                st.error(f"CloudConvert job failed: {error_details}")
                 return None
             
             # Wait before checking again
