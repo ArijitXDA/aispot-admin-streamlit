@@ -1,6 +1,6 @@
 """
 PDF Generator utility module
-Generates table standee PDFs using xhtml2pdf to preserve HTML design
+Generates table standee PDFs using WeasyPrint to preserve HTML design
 Creates 2x2 layout (4 standees per A4 page)
 """
 
@@ -8,7 +8,7 @@ import os
 from io import BytesIO
 from typing import Optional, Dict
 import streamlit as st
-from xhtml2pdf import pisa
+from weasyprint import HTML, CSS
 
 def generate_standee_pdf(row_data: Dict) -> Optional[bytes]:
     """
@@ -40,21 +40,16 @@ def generate_standee_pdf(row_data: Dict) -> Optional[bytes]:
         # Create 2x2 grid
         grid_html = create_2x2_grid_html(html_content)
         
-        # Generate PDF
-        pdf_buffer = BytesIO()
-        pisa_status = pisa.CreatePDF(grid_html, dest=pdf_buffer)
-        
-        if pisa_status.err:
-            st.error(f"PDF generation error: {pisa_status.err}")
-            return None
-        
-        pdf_bytes = pdf_buffer.getvalue()
-        pdf_buffer.close()
+        # Generate PDF using WeasyPrint
+        html_obj = HTML(string=grid_html)
+        pdf_bytes = html_obj.write_pdf()
         
         return pdf_bytes
     
     except Exception as e:
         st.error(f"Error generating PDF: {str(e)}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
         return None
 
 def create_2x2_grid_html(standee_html: str) -> str:
@@ -68,16 +63,22 @@ def create_2x2_grid_html(standee_html: str) -> str:
         str: HTML with 2x2 grid layout optimized for printing
     """
     
-    # Extract just the page content
+    # Extract the page div content
     page_start = standee_html.find('<div class="page"')
-    page_end = standee_html.find('</div><!--container-->', page_start) + len('</div><!--container--></div>')
+    page_end = standee_html.rfind('</div>', 0, standee_html.find('<div class="download-section">'))
     
     if page_start == -1:
-        # Fallback: extract body content
-        page_start = standee_html.find('<body>') + 6
-        page_end = standee_html.find('</body>')
-        page_content = standee_html[page_start:page_end]
+        # Fallback: just use the body
+        page_content = standee_html
     else:
+        # Get everything from page div to its closing tag
+        page_end = standee_html.find('</div><!--container-->', page_start)
+        if page_end == -1:
+            page_end = standee_html.find('</div>', page_start + 100)  # Find next closing div
+        page_end += len('</div>')
+        if '<!--container-->' in standee_html[page_end:page_end+20]:
+            page_end += len('<!--container-->') + 6  # Include closing page div
+        
         page_content = standee_html[page_start:page_end]
     
     # Extract styles
@@ -86,15 +87,15 @@ def create_2x2_grid_html(standee_html: str) -> str:
     original_styles = standee_html[style_start:style_end] if style_start != -1 else ""
     
     # Create 2x2 grid HTML
-    grid_html = f"""
-<!DOCTYPE html>
+    grid_html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Spot Standee - 2x2 Grid</title>
     {original_styles}
     <style>
-        /* Override for grid layout */
+        /* Override page settings for A4 grid */
         @page {{
             size: A4 portrait;
             margin: 0.3in 0.35in;
@@ -106,27 +107,33 @@ def create_2x2_grid_html(standee_html: str) -> str:
             background: white;
         }}
         
+        .grid-wrapper {{
+            width: 100%;
+            height: 100%;
+        }}
+        
         .grid-container {{
             width: 100%;
             display: grid;
-            grid-template-columns: repeat(2, 3.8in);
-            grid-template-rows: repeat(2, 5.7in);
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: repeat(2, 1fr);
             gap: 0.2in;
-            justify-content: center;
             page-break-inside: avoid;
         }}
         
         .grid-item {{
-            width: 3.8in;
-            height: 5.7in;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             position: relative;
         }}
         
         .grid-item .page {{
             width: 3.8in !important;
             height: 5.7in !important;
+            margin: 0;
             transform: scale(0.95);
-            transform-origin: top left;
+            transform-origin: center center;
         }}
         
         /* Cutting guides */
@@ -134,17 +141,18 @@ def create_2x2_grid_html(standee_html: str) -> str:
             position: fixed;
             background: none;
             z-index: 1000;
+            pointer-events: none;
         }}
         
         .cutting-guide.horizontal {{
-            height: 1px;
+            height: 0;
             width: 100%;
             left: 0;
             border-top: 1px dashed #cccccc;
         }}
         
         .cutting-guide.vertical {{
-            width: 1px;
+            width: 0;
             height: 100%;
             top: 0;
             border-left: 1px dashed #cccccc;
@@ -152,6 +160,20 @@ def create_2x2_grid_html(standee_html: str) -> str:
         
         .cutting-guide.h1 {{ top: 50%; }}
         .cutting-guide.v1 {{ left: 50%; }}
+        
+        /* Print optimization */
+        @media print {{
+            html, body {{
+                width: 100%;
+                height: 100%;
+            }}
+            .grid-container {{
+                page-break-inside: avoid;
+            }}
+            .grid-item {{
+                page-break-inside: avoid;
+            }}
+        }}
     </style>
 </head>
 <body>
@@ -159,15 +181,16 @@ def create_2x2_grid_html(standee_html: str) -> str:
     <div class="cutting-guide horizontal h1"></div>
     <div class="cutting-guide vertical v1"></div>
     
-    <div class="grid-container">
-        <div class="grid-item">{page_content}</div>
-        <div class="grid-item">{page_content}</div>
-        <div class="grid-item">{page_content}</div>
-        <div class="grid-item">{page_content}</div>
+    <div class="grid-wrapper">
+        <div class="grid-container">
+            <div class="grid-item">{page_content}</div>
+            <div class="grid-item">{page_content}</div>
+            <div class="grid-item">{page_content}</div>
+            <div class="grid-item">{page_content}</div>
+        </div>
     </div>
 </body>
-</html>
-"""
+</html>"""
     
     return grid_html
 
