@@ -6,7 +6,7 @@ Main application file with authentication and dashboard functionality
 import streamlit as st
 import streamlit_authenticator as stauth
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import time
 from typing import Optional
 import os
@@ -25,6 +25,7 @@ from utils.database import (
 )
 from utils.pdf_generator import generate_standee_pdf
 from utils.email_sender import send_standee_email
+from utils.analytics_email import send_analytics_email, send_bulk_analytics_emails
 
 # Page configuration
 st.set_page_config(
@@ -84,6 +85,13 @@ st.markdown("""
         border: 1px solid #f5c6cb;
         color: #721c24;
         margin: 1rem 0;
+    }
+    .bulk-section {
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin: 1.5rem 0;
+        border: 2px solid #e0e0e0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -274,6 +282,10 @@ def main():
         st.session_state.editing_row = None
     if 'viewing_html' not in st.session_state:
         st.session_state.viewing_html = None
+    if 'bulk_date_picker' not in st.session_state:
+        st.session_state.bulk_date_picker = False
+    if 'custom_date_aispot' not in st.session_state:
+        st.session_state.custom_date_aispot = None
     
     # Setup authentication
     authenticator = setup_authentication()
@@ -352,6 +364,65 @@ def main():
         elif sort_option == "Name (Z-A)":
             filtered_df = filtered_df.sort_values('name', ascending=False)
         
+        # Bulk Analytics Email Section
+        st.markdown('<div class="bulk-section">', unsafe_allow_html=True)
+        st.markdown("### 📧 Bulk Analytics Operations")
+        st.caption("Send analytics emails with quiz response data to all AI Spots")
+        
+        col_bulk1, col_bulk2, col_bulk3 = st.columns(3)
+        
+        with col_bulk1:
+            if st.button("📊 Email All - Today's Data (Last 24 Hours)", use_container_width=True):
+                with st.spinner("Sending analytics emails to all AI Spots..."):
+                    results = send_bulk_analytics_emails(filtered_df.to_dict('records'))
+                    if results['success'] > 0:
+                        st.success(f"✅ Successfully sent to {results['success']} AI Spot(s)")
+                    if results['failed'] > 0:
+                        st.error(f"❌ Failed to send to {results['failed']} AI Spot(s)")
+                        if results['failed_spots']:
+                            st.warning(f"Failed spots: {', '.join(results['failed_spots'])}")
+        
+        with col_bulk2:
+            if st.button("📅 Email All - Custom Date Range", use_container_width=True):
+                st.session_state.bulk_date_picker = True
+        
+        with col_bulk3:
+            st.write("")  # Placeholder
+        
+        # Date picker modal for bulk emails
+        if st.session_state.bulk_date_picker:
+            st.markdown("#### 📅 Select Date Range for Bulk Analytics")
+            col_date1, col_date2, col_date3, col_date4 = st.columns(4)
+            
+            with col_date1:
+                bulk_start_date = st.date_input("Start Date", value=date.today() - timedelta(days=7), key="bulk_start")
+            
+            with col_date2:
+                bulk_end_date = st.date_input("End Date", value=date.today(), key="bulk_end")
+            
+            with col_date3:
+                if st.button("📧 Send Bulk Emails"):
+                    start_dt = datetime.combine(bulk_start_date, datetime.min.time())
+                    end_dt = datetime.combine(bulk_end_date, datetime.max.time())
+                    
+                    with st.spinner("Sending analytics emails..."):
+                        results = send_bulk_analytics_emails(filtered_df.to_dict('records'), start_dt, end_dt)
+                        if results['success'] > 0:
+                            st.success(f"✅ Successfully sent to {results['success']} AI Spot(s)")
+                        if results['failed'] > 0:
+                            st.error(f"❌ Failed to send to {results['failed']} AI Spot(s)")
+                        st.session_state.bulk_date_picker = False
+                        st.rerun()
+            
+            with col_date4:
+                if st.button("Cancel"):
+                    st.session_state.bulk_date_picker = False
+                    st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
         # Show filter info
         active_filters = []
         if search_query:
@@ -381,6 +452,43 @@ def main():
                 display_html_preview(row_data)
             return
         
+        # Handle custom date range picker for individual AI Spot
+        if st.session_state.custom_date_aispot:
+            aispot_id = st.session_state.custom_date_aispot
+            row_data = get_aispot_by_id(aispot_id)
+            
+            if row_data:
+                st.markdown(f"#### 📅 Select Date Range for Analytics - {row_data['name']}")
+                col_date1, col_date2, col_date3, col_date4 = st.columns(4)
+                
+                with col_date1:
+                    custom_start_date = st.date_input("Start Date", value=date.today() - timedelta(days=7), key="custom_start")
+                
+                with col_date2:
+                    custom_end_date = st.date_input("End Date", value=date.today(), key="custom_end")
+                
+                with col_date3:
+                    if st.button("📧 Send Analytics Email"):
+                        start_dt = datetime.combine(custom_start_date, datetime.min.time())
+                        end_dt = datetime.combine(custom_end_date, datetime.max.time())
+                        
+                        with st.spinner("Sending analytics email..."):
+                            success = send_analytics_email(row_data, start_dt, end_dt)
+                            if success:
+                                st.success("✅ Analytics email sent successfully!")
+                                st.session_state.custom_date_aispot = None
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to send analytics email")
+                
+                with col_date4:
+                    if st.button("❌ Cancel"):
+                        st.session_state.custom_date_aispot = None
+                        st.rerun()
+                
+                st.markdown("---")
+        
         # Display table with action buttons
         st.markdown("### 📊 AI Spots Table")
         
@@ -407,8 +515,8 @@ def main():
                     else:
                         st.warning("⏳ Pending")
                 
-                # Action buttons
-                col1, col2, col3, col4, col5, col6 = st.columns(6)
+                # Action buttons - 8 columns now
+                col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
                 
                 with col1:
                     if not row['is_approved']:
@@ -473,6 +581,21 @@ def main():
                                 st.success("✅ Email sent successfully!")
                             else:
                                 st.error("❌ Failed to send email")
+                
+                with col7:
+                    if st.button("📊 Today's Data", key=f"analytics_today_{row['aispot_id']}", use_container_width=True):
+                        with st.spinner("Sending analytics email..."):
+                            success = send_analytics_email(row)
+                            if success:
+                                st.success("✅ Analytics email sent!")
+                                time.sleep(1)
+                            else:
+                                st.error("❌ Failed to send analytics")
+                
+                with col8:
+                    if st.button("📅 Custom Range", key=f"analytics_custom_{row['aispot_id']}", use_container_width=True):
+                        st.session_state.custom_date_aispot = row['aispot_id']
+                        st.rerun()
                 
                 st.markdown("---")
 
